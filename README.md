@@ -6,7 +6,7 @@ Send selected files to your smartphone or other devices using KDE Connect. This 
 
 - Select and send multiple files to KDE Connect devices
 - Automatically detects available and reachable KDE Connect devices
-- Automatically uses the only available device if there's just one
+- Configurable device selection behavior with `auto_select_single` option
 - Prompts for device selection when multiple devices are available
 - Provides notifications for successful and failed transfers
 - Warns when no files are selected
@@ -45,6 +45,17 @@ desc = "Send selected files via KDE Connect"
 ```
 
 Make sure the <kbd>ctrl</kbd> => <kbd>s</kbd> key combination is not used elsewhere.
+
+## Configuration (optional)
+
+If you want to always show device selection menu, regardless of device count, add this to your `~/.config/yazi/init.lua`:
+
+```lua
+-- Always show device selection
+require("kdeconnect-send"):setup({
+    auto_select_single = false,
+})
+```
 
 ## How to Use
 

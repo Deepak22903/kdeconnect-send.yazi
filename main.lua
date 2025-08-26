@@ -174,9 +174,24 @@ local get_selection_details = ya.sync(function()
 	return regular_files, directory_selected
 end)
 
+local state_option = ya.sync(function(state, attr)
+	return state[attr]
+end)
+
 return {
+	setup = function(state, options)
+		state.auto_select_single = options.auto_select_single
+	end,
+
 	entry = function(_, job)
 		ya.dbg("[kdeconnect-send] Plugin entry point triggered.")
+
+		-- Get configuration option for auto_select_single (default: true)
+		local auto_select_single = state_option("auto_select_single")
+		if auto_select_single == nil then
+			auto_select_single = true
+		end
+		ya.dbg("[kdeconnect-send] auto_select_single option: ", auto_select_single)
 
 		-- 1. Get selection details (files and directory flag) using Reverted Sync Check
 		local selected_files, directory_selected = get_selection_details()
@@ -291,18 +306,18 @@ return {
 		local device_id = nil
 		local target_device_name = "Unknown"
 
-		if #devices == 1 then
+		if #devices == 1 and auto_select_single then
 			device_id = devices[1].id
 			target_device_name = devices[1].name
 			ya.dbg(
-				"[kdeconnect-send] Only one device found: ",
+				"[kdeconnect-send] Only one device found and auto-select-single is true: ",
 				target_device_name,
 				" (",
 				device_id,
 				"). Using automatically."
 			)
 		else
-			ya.dbg("[kdeconnect-send] Multiple devices found. Prompting user with ya.which...")
+			ya.dbg("[kdeconnect-send] Prompting user with ya.which (multiple devices or auto-select-single is false)...")
 
 			-- Prepare candidates for ya.which
 			local device_choices = {}
