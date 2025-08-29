@@ -19,10 +19,10 @@ Send selected files to your smartphone or other devices using KDE Connect. This 
 
 ## Installation
 
-### Using `ya pack`
+### Using `ya pkg`
 
 ```sh
-ya pack -a Deepak22903/kdeconnect-send
+ya pkg add Deepak22903/kdeconnect-send
 ```
 
 ### Using Git
