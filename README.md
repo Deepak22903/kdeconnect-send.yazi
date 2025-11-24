@@ -38,7 +38,7 @@ git clone https://github.com/Deepak22903/kdeconnect-send.yazi.git ~/.config/yazi
 Add this to your `~/.config/yazi/keymap.toml`:
 
 ```toml
-[[manager.prepend_keymap]]
+[[mgr.prepend_keymap]]
 on   = [ "<C-s>" ]
 run  = "plugin kdeconnect-send"
 desc = "Send selected files via KDE Connect"
