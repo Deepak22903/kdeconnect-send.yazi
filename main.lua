@@ -99,7 +99,20 @@ local get_selection_details = ya.sync(function()
 		break
 	end
 	if selection_empty then
-		ya.dbg("[kdeconnect-send] Selection map is empty.")
+		local hovered_file = cx.active.current.hovered -- Use the hovered file under cursor
+		if hovered_file then
+			ya.dbg(
+				"[kdeconnect-send] Nothing was selected. Will now use the hovered file under cursor: ",
+				tostring(hovered_file.url)
+			)
+			-- For safety, only treat as a regular file when cha.is_dir is explicitly false.
+			-- If cha is missing or is_dir is nil/true, treat as a (potential) directory.
+			if hovered_file.cha and hovered_file.cha.is_dir == false then
+				return { tostring(hovered_file.url) }, false -- Regular file hovered
+			else
+				return {}, true -- Directory or indeterminate entry: mark directory_selected
+			end
+		end
 		return {}, false
 	end
 
