@@ -38,8 +38,22 @@ local get_selected_paths = ya.sync(function()
 	return paths
 end)
 
+local state_option = ya.sync(function(state, attr)
+	return state[attr]
+end)
+
 return {
+	setup = function(state, options)
+		state.auto_select_single = options.auto_select_single
+	end,
+
 	entry = function(_, job)
+		-- Get configuration option for auto_select_single (default: true)
+		local auto_select_single = state_option("auto_select_single")
+		if auto_select_single == nil then
+			auto_select_single = true
+		end
+
 		-- 1. Get selected file paths
 		local paths = get_selected_paths()
 		if #paths == 0 then
@@ -129,7 +143,7 @@ return {
 		local device_id = nil
 		local device_name = ""
 
-		if #devices == 1 then
+		if #devices == 1 and auto_select_single then
 			device_id = devices[1].id
 			device_name = devices[1].name
 		else
