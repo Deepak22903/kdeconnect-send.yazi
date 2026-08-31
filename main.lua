@@ -31,8 +31,8 @@ local get_selected_paths = ya.sync(function()
 			table.insert(paths, tostring(h.url))
 		end
 	else
-		for url, _ in pairs(selected) do
-			table.insert(paths, tostring(url))
+		for _, file in pairs(selected) do
+			table.insert(paths, tostring(file.url))
 		end
 	end
 	return paths
