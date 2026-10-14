@@ -1,8 +1,14 @@
 -- ~/.config/yazi/plugins/kdeconnect-send.yazi/main.lua
 
 -- Helper to run commands and capture output
-local function run_command(cmd_name, args)
+local function run_command(cmd_name, args, cwd, environment)
 	local cmd = Command(cmd_name)
+	for key, value in pairs(environment or {}) do
+		cmd:env(key, value)
+	end
+	if cwd then
+		cmd:cwd(cwd)
+	end
 	for _, arg in ipairs(args) do
 		cmd:arg(arg)
 	end
@@ -17,6 +23,57 @@ local function run_command(cmd_name, args)
 	end
 
 	return child:wait_with_output()
+end
+
+-- KDE Connect queues transfers, so archives must outlive kdeconnect-cli.
+-- Keep them in private temporary directories, never overwrite adjacent files.
+local function prepare_share(path)
+	local cha, err = fs.cha(Url(path))
+	if not cha then
+		return nil, "Could not inspect " .. path .. ": " .. tostring(err)
+	end
+	if not cha.is_dir then
+		return path
+	end
+
+	local normalized = path:gsub("/+$", "")
+	local parent, name = normalized:match("^(.*)/([^/]+)$")
+	if not name then
+		return nil, "Cannot archive a filesystem root: " .. path
+	end
+	if parent == "" then parent = "/" end
+
+	local temp, temp_err = run_command("mktemp", { "-d", "-t", "kdeconnect-send.XXXXXX" })
+	if not temp or not temp.status.success then
+		return nil, "Could not create temporary directory: " .. tostring(temp_err or (temp and temp.stderr))
+	end
+	local temp_dir = temp.stdout:gsub("\n$", "")
+	local archive = temp_dir .. "/" .. name .. ".zip"
+	ya.notify({
+		title = "KDE Connect Send",
+		content = "Packing " .. name .. " into a ZIP without compression...",
+		level = "info",
+		timeout = 5,
+	})
+	-- Run from the parent to preserve the folder name without absolute paths.
+	-- Store symlinks as links: do not pull in data outside the selected folder.
+	-- Ignore inherited defaults: ZIPOPT=-m would delete the source folder.
+	local output, zip_err = run_command("zip", { "-0", "-r", "-q", "-y", archive, "--", "./" .. name }, parent,
+		{ ZIPOPT = "", ZIP = "" })
+	if not output or not output.status.success then
+		-- No transfer was queued, so partial output is safe to remove.
+		local removed, remove_err = true, nil
+		if fs.cha(Url(archive)) then
+			removed, remove_err = fs.remove("file", Url(archive))
+		end
+		local dir_removed, dir_err = fs.remove("dir", Url(temp_dir))
+		local message = "Could not archive " .. path .. ": " .. tostring(zip_err or (output and output.stderr))
+		if not removed or not dir_removed then
+			message = message .. "\nCould not clean temporary location " .. temp_dir .. ": " .. tostring(remove_err or dir_err)
+		end
+		return nil, message
+	end
+	return archive, nil, archive
 end
 
 -- Sync block to fetch selected file paths
@@ -50,20 +107,6 @@ return {
 				timeout = 3,
 			})
 			return
-		end
-
-		-- 2. Check for directories (KDE Connect sharing works best for regular files)
-		for _, path in ipairs(paths) do
-			local cha, err = fs.cha(Url(path))
-			if cha and cha.is_dir then
-				ya.notify({
-					title = "KDE Connect Send",
-					content = "Sending directories is not supported. Please select files only.",
-					level = "error",
-					timeout = 5,
-				})
-				return
-			end
 		end
 
 		-- 3. Get available KDE Connect devices
@@ -146,12 +189,18 @@ return {
 			device_name = devices[idx].name
 		end
 
-		-- 6. Send files
+		-- 6. Archive directories and queue transfers only after device selection.
 		local success_count = 0
+		local archives = {}
 		for _, path in ipairs(paths) do
-			local send_output, send_err = run_command("kdeconnect-cli", { "--share", path, "--device", device_id })
-			if send_err or (send_output and not send_output.status.success) then
-				local msg = send_err and tostring(send_err) or (send_output and send_output.stderr or "Unknown error")
+			local share_path, prepare_err, archive = prepare_share(path)
+			if archive then archives[#archives + 1] = archive end
+			local send_output, send_err
+			if share_path then
+				send_output, send_err = run_command("kdeconnect-cli", { "--share", share_path, "--device", device_id })
+			end
+			if prepare_err or send_err or not send_output or not send_output.status.success then
+				local msg = prepare_err or (send_err and tostring(send_err)) or (send_output and send_output.stderr) or "Unknown error"
 				ya.notify({
 					title = "KDE Connect Error",
 					content = "Failed to send " .. path .. ": " .. msg,
@@ -163,11 +212,21 @@ return {
 			end
 		end
 
+		-- Archives cannot be deleted on CLI exit: the daemon may still need them.
+		if #archives > 0 then
+			ya.notify({
+				title = "KDE Connect ZIPs",
+				content = "Temporary ZIPs kept until you delete them after the transfer finishes:\n" .. table.concat(archives, "\n"),
+				level = "info",
+				timeout = 15,
+			})
+		end
+
 		-- 7. Final status
 		if success_count > 0 then
 			ya.notify({
 				title = "KDE Connect Send",
-				content = string.format("Successfully sent %d/%d files to %s", success_count, #paths, device_name),
+				content = string.format("Queued %d/%d items for sending to %s", success_count, #paths, device_name),
 				level = "info",
 				timeout = 5,
 			})
